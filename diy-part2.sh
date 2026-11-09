@@ -45,17 +45,22 @@ STOP=10
 
 set_host() {
 	for f in /sys/class/usb_role/*/role; do
-		[ -w "$f" ] && { echo host > "$f"; return 0; }
+		[ -w "$f" ] || continue
+		echo host > "$f" 2>/dev/null && { logger -t usbhost "host mode via $f"; return 0; }
 	done
 	for f in /sys/devices/platform/*/role /sys/devices/platform/*/*/role /sys/devices/platform/*/*/*/role; do
 		[ -r "$f" ] || continue
 		case "$(cat "$f" 2>/dev/null)" in
-			host|gadget|otg) [ -w "$f" ] && { echo host > "$f"; return 0; } ;;
+			host|gadget|otg)
+				[ -w "$f" ] || continue
+				echo host > "$f" 2>/dev/null && { logger -t usbhost "host mode via $f"; return 0; }
+				;;
 		esac
 	done
 	mount -t debugfs none /sys/kernel/debug 2>/dev/null
 	for f in /sys/kernel/debug/usb/ci_hdrc.*/role; do
-		[ -w "$f" ] && { echo host > "$f"; return 0; }
+		[ -w "$f" ] || continue
+		echo host > "$f" 2>/dev/null && { logger -t usbhost "host mode via $f"; return 0; }
 	done
 	return 1
 }
@@ -68,6 +73,7 @@ boot() {
 			sleep 0.5
 			i=$((i+1))
 		done
+		logger -t usbhost "failed to switch to host mode"
 	) &
 }
 USBHOST_EOF
