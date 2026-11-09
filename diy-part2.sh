@@ -6,6 +6,13 @@
 # 版权: (c) 2019-2024 P3TERX <https://p3terx.com>
 # 基于 MIT 开源协议，详见 /LICENSE
 
+# 补回缺失的 libffi：lkiuyu/immortalwrt 树中没有 package/libs/libffi，
+# 而 glib2 / ModemManager 依赖它，否则 glib2-gobject 打包会报
+# "missing dependencies for the following libraries: libffi.so.8"。
+if [ ! -d package/libs/libffi ]; then
+  mkdir -p package/libs
+  cp -rf "$GITHUB_WORKSPACE/custom-packages/libffi" package/libs/libffi
+fi
 # 修改默认IP地址
 #sed -i 's/192.168.1.1/192.168.100.1/g' package/base-files/files/bin/config_generate
 
