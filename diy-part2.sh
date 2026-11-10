@@ -46,7 +46,7 @@ if [ -f "$DTS_DIR/msm8916-thwc-ufi001c.dts" ]; then
 	/delete-property/ extcon;
 };
 DTS_EOF
-	python3 - <<'PY'
+	python3 - <<'PY' || exit 1
 p = 'target/linux/msm89xx/image/msm8916.mk'
 s = open(p).read()
 old = '''define Device/openstick-qrzl903
@@ -59,4 +59,6 @@ if old not in s:
 s = s.replace(old, new, 1)
 open(p, 'w').write(s)
 PY
+else
+	echo "WARNING: msm8916-thwc-ufi001c.dts not found, skip host DTS patch"
 fi
