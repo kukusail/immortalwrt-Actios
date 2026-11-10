@@ -35,47 +35,28 @@ sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/M
 # git clone https://github.com/lkiuyu/luci-app-temp-status package/luci-app-temp-status
 # git clone https://github.com/lkiuyu/DbusSmsForwardCPlus package/DbusSmsForwardCPlus
 
-# 默认开启 USB Host（扩展坞/OTG 场景）：开机后把 ci_hdrc 切到 host
-mkdir -p files/etc/init.d files/etc/rc.d
-cat > files/etc/init.d/usbhost <<'USBHOST_EOF'
-#!/bin/sh /etc/rc.common
+# qrzl903：内核直接 USB Host（dr_mode=host，不保留 gadget）
+DTS_DIR="target/linux/msm89xx/dts"
+if [ -f "$DTS_DIR/msm8916-thwc-ufi001c.dts" ]; then
+	cp "$DTS_DIR/msm8916-thwc-ufi001c.dts" "$DTS_DIR/msm8916-thwc-qrzl903.dts"
+	cat >> "$DTS_DIR/msm8916-thwc-qrzl903.dts" <<'DTS_EOF'
 
-START=99
-STOP=10
-
-set_host() {
-	for f in /sys/class/usb_role/*/role; do
-		[ -w "$f" ] || continue
-		echo host > "$f" 2>/dev/null && { logger -t usbhost "host mode via $f"; return 0; }
-	done
-	for f in /sys/devices/platform/*/role /sys/devices/platform/*/*/role /sys/devices/platform/*/*/*/role; do
-		[ -r "$f" ] || continue
-		case "$(cat "$f" 2>/dev/null)" in
-			host|gadget|otg)
-				[ -w "$f" ] || continue
-				echo host > "$f" 2>/dev/null && { logger -t usbhost "host mode via $f"; return 0; }
-				;;
-		esac
-	done
-	mount -t debugfs none /sys/kernel/debug 2>/dev/null
-	for f in /sys/kernel/debug/usb/ci_hdrc.*/role; do
-		[ -w "$f" ] || continue
-		echo host > "$f" 2>/dev/null && { logger -t usbhost "host mode via $f"; return 0; }
-	done
-	return 1
-}
-
-boot() {
-	(
-		i=0
-		while [ $i -lt 20 ]; do
-			set_host && exit 0
-			sleep 0.5
-			i=$((i+1))
-		done
-		logger -t usbhost "failed to switch to host mode"
-	) &
-}
-USBHOST_EOF
-chmod 755 files/etc/init.d/usbhost
-ln -sf ../init.d/usbhost files/etc/rc.d/S99usbhost
+&usb {
+	dr_mode = "host";
+	/delete-property/ extcon;
+};
+DTS_EOF
+	python3 - <<'PY'
+p = 'target/linux/msm89xx/image/msm8916.mk'
+s = open(p).read()
+old = '''define Device/openstick-qrzl903
+  $(Device/openstick-ufi001c)'''
+new = '''define Device/openstick-qrzl903
+  $(Device/openstick-ufi001c)
+  DEVICE_DTS := msm8916-thwc-qrzl903'''
+if old not in s:
+    raise SystemExit('qrzl903 device block not found')
+s = s.replace(old, new, 1)
+open(p, 'w').write(s)
+PY
+fi
