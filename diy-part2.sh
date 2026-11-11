@@ -133,3 +133,11 @@ uci commit network
 exit 0
 STP_EOF
 chmod 755 files/etc/uci-defaults/99-lan-stp
+
+# 只保留 S99zz-modem-retry，清掉 rc.common 自动生成的重复启动项
+cat > files/etc/uci-defaults/zz-modem-order <<'ORDER_EOF'
+#!/bin/sh
+rm -f /etc/rc.d/S99modem-retry /etc/rc.d/K10modem-retry
+exit 0
+ORDER_EOF
+chmod 755 files/etc/uci-defaults/zz-modem-order
