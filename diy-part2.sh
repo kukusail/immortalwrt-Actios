@@ -74,3 +74,62 @@ uci commit network
 exit 0
 UCI_EOF
 chmod 755 files/etc/uci-defaults/99-lan-eth1
+
+# 关闭 modem 接口的开机自动拉起（由 modem-retry 在 ModemManager 就绪后 ifup）
+if [ -d feeds/openstick ]; then
+	TWEAK=$(find feeds/openstick -path '*openstick-tweaks/files/openstick_tweak' | head -n1)
+	[ -n "$TWEAK" ] && sed -i "s/network.modem.auto='1'/network.modem.auto='0'/" "$TWEAK"
+fi
+
+# ModemManager 就绪后再拉起 modem 接口，避免开机 set allowed modes 竞争
+mkdir -p files/etc/init.d files/etc/rc.d
+cat > files/etc/init.d/modem-retry <<'MODEM_EOF'
+#!/bin/sh /etc/rc.common
+
+START=99
+STOP=10
+
+boot() {
+	[ -x /usr/bin/mmcli ] || exit 0
+	[ -n "$(uci -q get network.modem)" ] || exit 0
+	(
+		logger -t modem-retry "waiting for modem"
+		i=0
+		while [ $i -lt 90 ]; do
+			mmcli -L 2>/dev/null | grep -q 'Modem/' && break
+			sleep 2
+			i=$((i+1))
+		done
+		sleep 15
+		tries=0
+		while [ $tries -lt 3 ]; do
+			if ifstatus modem 2>/dev/null | grep -q '"up": true'; then
+				logger -t modem-retry "modem up"
+				exit 0
+			fi
+			logger -t modem-retry "ifup modem (try $((tries+1)))"
+			ifdown modem 2>/dev/null
+			sleep 2
+			ifup modem
+			sleep 30
+			tries=$((tries+1))
+		done
+		if ifstatus modem 2>/dev/null | grep -q '"up": true'; then
+			logger -t modem-retry "modem up"
+		else
+			logger -t modem-retry "modem still down"
+		fi
+	) &
+}
+MODEM_EOF
+chmod 755 files/etc/init.d/modem-retry
+ln -sf ../init.d/modem-retry files/etc/rc.d/S99zz-modem-retry
+
+# br-lan 开启 STP，双网口都接线时防止二层环路
+cat > files/etc/uci-defaults/99-lan-stp <<'STP_EOF'
+#!/bin/sh
+uci -q set network.@device[0].stp='1'
+uci commit network
+exit 0
+STP_EOF
+chmod 755 files/etc/uci-defaults/99-lan-stp
