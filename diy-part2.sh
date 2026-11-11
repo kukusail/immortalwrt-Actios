@@ -62,3 +62,15 @@ PY
 else
 	echo "WARNING: msm8916-thwc-ufi001c.dts not found, skip host DTS patch"
 fi
+
+# 默认把第二个 RTL8152B（eth1）也加入 br-lan
+mkdir -p files/etc/uci-defaults
+cat > files/etc/uci-defaults/99-lan-eth1 <<'UCI_EOF'
+#!/bin/sh
+# 双网卡 RTL8152B：eth0 默认已在 br-lan，这里补 eth1
+uci -q del_list network.@device[0].ports='eth1'
+uci add_list network.@device[0].ports='eth1'
+uci commit network
+exit 0
+UCI_EOF
+chmod 755 files/etc/uci-defaults/99-lan-eth1
