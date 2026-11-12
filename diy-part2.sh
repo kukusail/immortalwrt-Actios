@@ -141,3 +141,28 @@ rm -f /etc/rc.d/S99modem-retry /etc/rc.d/K10modem-retry
 exit 0
 ORDER_EOF
 chmod 755 files/etc/uci-defaults/zz-modem-order
+
+# ufi003：内核直接 USB Host（与 qrzl903 共用 ufi001c 板级 DTS）
+if [ -f "$DTS_DIR/msm8916-thwc-ufi001c.dts" ]; then
+	cp "$DTS_DIR/msm8916-thwc-ufi001c.dts" "$DTS_DIR/msm8916-thwc-ufi003.dts"
+	cat >> "$DTS_DIR/msm8916-thwc-ufi003.dts" <<'DTS_EOF'
+
+&usb {
+	dr_mode = "host";
+	/delete-property/ extcon;
+};
+DTS_EOF
+	python3 - <<'PY' || exit 1
+p = 'target/linux/msm89xx/image/msm8916.mk'
+s = open(p).read()
+old = '''define Device/openstick-ufi003
+  $(Device/openstick-ufi001c)'''
+new = '''define Device/openstick-ufi003
+  $(Device/openstick-ufi001c)
+  DEVICE_DTS := msm8916-thwc-ufi003'''
+if old not in s:
+    raise SystemExit('ufi003 device block not found')
+s = s.replace(old, new, 1)
+open(p, 'w').write(s)
+PY
+fi
