@@ -83,43 +83,57 @@ fi
 
 # ModemManager 就绪后再拉起 modem 接口，避免开机 set allowed modes 竞争
 mkdir -p files/etc/init.d files/etc/rc.d
+mkdir -p files/usr/bin
+cat > files/usr/bin/modem-retry-loop <<'MODEM_LOOP_EOF'
+#!/bin/sh
+[ -n "$(uci -q get network.modem)" ] || { while true; do sleep 3600; done; }
+
+i=0
+while [ $i -lt 90 ]; do
+	[ -n "$(timeout 5 mmcli -L 2>/dev/null | grep -o '/Modem/[0-9]*')" ] && break
+	logger -t modem-retry "waiting for modem"
+	sleep 2
+	i=$((i+1))
+done
+
+sleep 15
+tries=0
+while [ $tries -lt 3 ]; do
+	if ifstatus modem 2>/dev/null | grep -q '"up": true'; then
+		logger -t modem-retry "modem up"
+		break
+	fi
+	logger -t modem-retry "ifup modem (try $((tries+1)))"
+	timeout 10 ifdown modem 2>/dev/null
+	sleep 2
+	timeout 30 ifup modem
+	sleep 30
+	tries=$((tries+1))
+done
+if ifstatus modem 2>/dev/null | grep -q '"up": true'; then
+	logger -t modem-retry "modem up"
+else
+	logger -t modem-retry "modem still down"
+fi
+
+while true; do sleep 3600; done
+MODEM_LOOP_EOF
+chmod 755 files/usr/bin/modem-retry-loop
+
 cat > files/etc/init.d/modem-retry <<'MODEM_EOF'
 #!/bin/sh /etc/rc.common
 
 START=99
 STOP=10
+USE_PROCD=1
 
-boot() {
-	[ -x /usr/bin/mmcli ] || exit 0
-	[ -n "$(uci -q get network.modem)" ] || exit 0
-	(
-		logger -t modem-retry "waiting for modem"
-		i=0
-		while [ $i -lt 90 ]; do
-			mmcli -L 2>/dev/null | grep -q 'Modem/' && break
-			sleep 2
-			i=$((i+1))
-		done
-		sleep 15
-		tries=0
-		while [ $tries -lt 3 ]; do
-			if ifstatus modem 2>/dev/null | grep -q '"up": true'; then
-				logger -t modem-retry "modem up"
-				exit 0
-			fi
-			logger -t modem-retry "ifup modem (try $((tries+1)))"
-			ifdown modem 2>/dev/null
-			sleep 2
-			ifup modem
-			sleep 30
-			tries=$((tries+1))
-		done
-		if ifstatus modem 2>/dev/null | grep -q '"up": true'; then
-			logger -t modem-retry "modem up"
-		else
-			logger -t modem-retry "modem still down"
-		fi
-	) &
+start_service() {
+	procd_open_instance
+	procd_set_param command /usr/bin/modem-retry-loop
+	procd_set_param respawn
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	procd_close_instance
 }
 MODEM_EOF
 chmod 755 files/etc/init.d/modem-retry
