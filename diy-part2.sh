@@ -90,7 +90,7 @@ cat > files/usr/bin/modem-retry-loop <<'MODEM_LOOP_EOF'
 
 i=0
 while [ $i -lt 90 ]; do
-	[ -n "$(timeout 5 mmcli -L 2>/dev/null | grep -o '/Modem/[0-9]*')" ] && break
+	[ -n "$(mmcli -L 2>/dev/null | grep -o '/Modem/[0-9]*')" ] && break
 	logger -t modem-retry "waiting for modem"
 	sleep 2
 	i=$((i+1))
@@ -104,9 +104,9 @@ while [ $tries -lt 3 ]; do
 		break
 	fi
 	logger -t modem-retry "ifup modem (try $((tries+1)))"
-	timeout 10 ifdown modem 2>/dev/null
+	ifdown modem 2>/dev/null
 	sleep 2
-	timeout 30 ifup modem
+	ifup modem
 	sleep 30
 	tries=$((tries+1))
 done
